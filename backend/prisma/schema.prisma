@@ -1,0 +1,531 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum GlobalRole {
+  SUPER_ADMIN
+  USER
+}
+
+enum EventRoleType {
+  ORGANIZER
+  JUDGE
+  PARTICIPANT
+}
+
+enum EventStatus {
+  UPCOMING
+  ACTIVE
+  COMPLETED
+}
+
+enum TeamRole {
+  LEADER
+  MEMBER
+}
+
+enum InviteStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  EVALUATED
+}
+
+enum JudgeInviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum AssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum CommentStatus {
+  APPROVED
+  PENDING
+  FLAGGED
+  REMOVED
+}
+
+enum DeliveryStatus {
+  SUCCESS
+  FAILED
+  PENDING
+}
+
+enum CertificateType {
+  PARTICIPATION
+  WINNER
+  TRACK_WINNER
+}
+
+model User {
+  id           String      @id @default(uuid())
+  email        String      @unique
+  name         String      @db.VarChar(120)
+  passwordHash String      @db.VarChar(255)
+  globalRole   GlobalRole  @default(USER)
+  tokenVersion Int         @default(1)
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  sessions         Session[]
+  eventRoles       EventRole[]
+  teamMembers      TeamMember[]
+  evaluations      Evaluation[]
+  votes            CommunityVote[]
+  comments         CommunityComment[]
+  auditLogs        AuditLog[]
+  certificates     Certificate[]
+  judgeRecords     SignedJudgeRecord[]
+  judgeAssignments JudgeAssignment[]
+}
+
+model Session {
+  id               String   @id @default(uuid())
+  sessionTokenHash String   @unique @db.VarChar(64)
+  userId           String
+  tokenVersion     Int      @default(1)
+  ipAddress        String?  @db.VarChar(45)
+  userAgent        String?  @db.VarChar(500)
+  isValid          Boolean  @default(true)
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionTokenHash])
+  @@index([expiresAt])
+  @@index([userId, isValid])
+}
+
+model EventRole {
+  id        String        @id @default(uuid())
+  eventId   String
+  userId    String
+  role      EventRoleType
+  createdAt DateTime      @default(now())
+
+  event     Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId, role])
+  @@index([userId, eventId])
+}
+
+model Event {
+  id                 String              @id @default(uuid())
+  name               String              @db.VarChar(255)
+  description        String?             @db.Text
+  status             EventStatus         @default(UPCOMING)
+  startDate          DateTime
+  endDate            DateTime
+  submissionDeadline DateTime
+  judgingDeadline    DateTime
+  resultsPublished   Boolean             @default(false)
+  maxTeamSize        Int                 @default(4)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  roles              EventRole[]
+  tracks             Track[]
+  prizes             Prize[]
+  teams              Team[]
+  teamMembers        TeamMember[]
+  submissions        Submission[]
+  judgeInvitations   JudgeInvitation[]
+  rubric             Rubric?
+  judgeAssignments   JudgeAssignment[]
+  finalResults       FinalResult[]
+  communityVotes     CommunityVote[]
+  communityComments  CommunityComment[]
+  certificates       Certificate[]
+  signedJudgeRecords SignedJudgeRecord[]
+  prizeAwards        PrizeAward[]
+}
+
+model Track {
+  id          String       @id @default(uuid())
+  eventId     String
+  name        String       @db.VarChar(100)
+  description String?      @db.Text
+  createdAt   DateTime     @default(now())
+
+  event       Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  teams       Team[]
+  submissions Submission[]
+  prizes      Prize[]
+
+  @@unique([eventId, name])
+  @@unique([id, eventId])
+}
+
+model Prize {
+  id          String       @id @default(uuid())
+  eventId     String
+  trackId     String?
+  name        String       @db.VarChar(150)
+  description String?      @db.Text
+  cashValue   Decimal      @default(0) @db.Decimal(10, 2)
+  createdAt   DateTime     @default(now())
+
+  event       Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  track       Track?       @relation(fields: [trackId], references: [id], onDelete: SetNull)
+  awards      PrizeAward[]
+
+  @@index([eventId])
+}
+
+model PrizeAward {
+  id           String     @id @default(uuid())
+  prizeId      String
+  submissionId String
+  eventId      String
+  rankPosition Int        @default(1)
+  notes        String?    @db.VarChar(255)
+  awardedAt    DateTime   @default(now())
+
+  prize        Prize      @relation(fields: [prizeId], references: [id], onDelete: Cascade)
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  event        Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([prizeId, submissionId])
+  @@index([eventId, prizeId])
+}
+
+model Team {
+  id          String       @id @default(uuid())
+  eventId     String
+  trackId     String?
+  name        String       @db.VarChar(150)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  event       Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  track       Track?       @relation(fields: [trackId], references: [id], onDelete: SetNull)
+  members     TeamMember[]
+  invites     TeamInvite[]
+  submission  Submission?
+
+  @@unique([eventId, name])
+  @@unique([id, eventId])
+}
+
+model TeamMember {
+  id        String    @id @default(uuid())
+  teamId    String
+  userId    String
+  eventId   String
+  role      TeamRole  @default(MEMBER)
+  joinedAt  DateTime  @default(now())
+
+  team      Team      @relation(fields: [teamId, eventId], references: [id, eventId], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@unique([userId, eventId])
+  @@index([eventId, userId])
+}
+
+model TeamInvite {
+  id          String       @id @default(uuid())
+  teamId      String
+  inviteCode  String       @unique @db.VarChar(12)
+  inviteToken String       @unique @db.VarChar(64)
+  targetEmail String?      @db.VarChar(255)
+  maxUses     Int          @default(5)
+  usedCount   Int          @default(0)
+  status      InviteStatus @default(ACTIVE)
+  expiresAt   DateTime
+  createdAt   DateTime     @default(now())
+
+  team        Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([inviteCode])
+  @@index([inviteToken])
+}
+
+model Submission {
+  id           String            @id @default(uuid())
+  eventId      String
+  teamId       String            @unique
+  trackId      String
+  projectName  String            @db.VarChar(255)
+  tagline      String?           @db.VarChar(300)
+  description  String            @db.Text
+  repoUrl      String?           @db.VarChar(500)
+  demoUrl      String?           @db.VarChar(500)
+  videoUrl     String?           @db.VarChar(500)
+  isDraft      Boolean           @default(true)
+  submittedAt  DateTime?
+  status       SubmissionStatus  @default(DRAFT)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  team         Team              @relation(fields: [teamId, eventId], references: [id, eventId], onDelete: Restrict)
+  event        Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  track        Track             @relation(fields: [trackId, eventId], references: [id, eventId], onDelete: Restrict)
+  assignments  JudgeAssignment[]
+  finalResult  FinalResult?
+  votes        CommunityVote[]
+  comments     CommunityComment[]
+  prizeAwards  PrizeAward[]
+
+  @@unique([id, eventId])
+  @@unique([teamId, eventId])
+  @@index([eventId, status])
+  @@index([trackId])
+}
+
+model JudgeInvitation {
+  id              String            @id @default(uuid())
+  eventId         String
+  email           String            @db.VarChar(255)
+  invitationToken String            @unique @db.VarChar(64)
+  invitedByUserId String
+  status          JudgeInviteStatus @default(PENDING)
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  createdAt       DateTime          @default(now())
+
+  event           Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, email])
+  @@index([invitationToken])
+}
+
+model Rubric {
+  id          String            @id @default(uuid())
+  eventId     String            @unique
+  name        String            @db.VarChar(120)
+  isLocked    Boolean           @default(false)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  event       Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  criteria    RubricCriterion[]
+}
+
+model RubricCriterion {
+  id                String                 @id @default(uuid())
+  rubricId          String
+  name              String                 @db.VarChar(100)
+  description       String?                @db.Text
+  weightBasisPoints Int
+  maxPoints         Decimal                @db.Decimal(5, 2)
+  orderIndex        Int
+
+  rubric            Rubric                 @relation(fields: [rubricId], references: [id], onDelete: Cascade)
+  scoreItems        EvaluationScoreItem[]
+
+  @@index([rubricId, orderIndex])
+}
+
+model JudgeAssignment {
+  id           String           @id @default(uuid())
+  eventId      String
+  judgeId      String
+  submissionId String
+  batchId      String?          @db.VarChar(64)
+  status       AssignmentStatus @default(ASSIGNED)
+  assignedAt   DateTime         @default(now())
+
+  event        Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  judge        User             @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  submission   Submission       @relation(fields: [submissionId, eventId], references: [id, eventId], onDelete: Cascade)
+  evaluation   Evaluation?
+
+  @@unique([judgeId, submissionId])
+  @@index([eventId, judgeId])
+  @@index([batchId])
+}
+
+model Evaluation {
+  id            String                @id @default(uuid())
+  assignmentId  String                @unique
+  submissionId  String
+  judgeId       String
+  rawTotalScore Decimal               @db.Decimal(7, 4)
+  feedback      String?               @db.Text
+  isDraft       Boolean               @default(false)
+  submittedAt   DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  assignment    JudgeAssignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  judge         User                  @relation(fields: [judgeId], references: [id], onDelete: Restrict)
+  scoreItems    EvaluationScoreItem[]
+
+  @@unique([submissionId, judgeId])
+  @@index([judgeId])
+  @@index([submissionId])
+}
+
+model EvaluationScoreItem {
+  id                    String          @id @default(uuid())
+  evaluationId          String
+  criterionId           String
+  score                 Decimal         @db.Decimal(5, 2)
+  comment               String?         @db.VarChar(500)
+  criterionNameSnapshot String          @db.VarChar(100)
+  weightSnapshot        Int
+  maxPointsSnapshot     Decimal         @db.Decimal(5, 2)
+
+  evaluation            Evaluation      @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  criterion             RubricCriterion @relation(fields: [criterionId], references: [id], onDelete: Restrict)
+
+  @@unique([evaluationId, criterionId])
+}
+
+model FinalResult {
+  id                  String     @id @default(uuid())
+  eventId             String
+  submissionId        String     @unique
+  rawAverageScore     Decimal    @db.Decimal(7, 4)
+  normalizedScore     Decimal    @db.Decimal(7, 4)
+  communityVoteCount  Int        @default(0)
+  finalCompositeScore Decimal    @db.Decimal(7, 4)
+  rank                Int
+  trackRank           Int?
+  tieBreakerReason    String?    @db.VarChar(255)
+  isPublished         Boolean    @default(false)
+  publishedAt         DateTime?
+
+  event               Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  submission          Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, rank])
+}
+
+model CommunityVote {
+  id               String     @id @default(uuid())
+  eventId          String
+  submissionId     String
+  voterUserId      String?
+  voterFingerprint String     @db.VarChar(128)
+  ipAddress        String?    @db.VarChar(45)
+  createdAt        DateTime   @default(now())
+
+  event            Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  submission       Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  voterUser        User?      @relation(fields: [voterUserId], references: [id], onDelete: SetNull)
+
+  @@unique([eventId, voterFingerprint, submissionId])
+  @@index([submissionId])
+  @@index([voterUserId])
+}
+
+model CommunityComment {
+  id               String        @id @default(uuid())
+  eventId          String
+  submissionId     String
+  authorUserId     String
+  content          String        @db.Text
+  moderationStatus CommentStatus @default(APPROVED)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  event            Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  submission       Submission    @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  author           User          @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId, moderationStatus])
+  @@index([authorUserId])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String   @db.VarChar(100)
+  entityType String   @db.VarChar(50)
+  entityId   String   @db.VarChar(128)
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?  @db.VarChar(45)
+  timestamp  DateTime @default(now())
+
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([timestamp])
+  @@index([userId])
+}
+
+model WebhookSubscription {
+  id               String            @id @default(uuid())
+  name             String            @db.VarChar(100)
+  targetUrl        String            @db.VarChar(500)
+  secretToken      String            @db.VarChar(64)
+  subscribedEvents String[]
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  deliveries       WebhookDelivery[]
+}
+
+model WebhookDelivery {
+  id             String              @id @default(uuid())
+  subscriptionId String
+  event          String              @db.VarChar(100)
+  payload        Json
+  httpStatus     Int?
+  attempts       Int                 @default(0)
+  status         DeliveryStatus      @default(PENDING)
+  deliveredAt    DateTime?
+
+  subscription   WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId, status])
+}
+
+
+model Certificate {
+  id               String          @id @default(uuid())
+  eventId          String
+  recipientUserId  String
+  recipientName    String          @db.VarChar(150)
+  certificateType  CertificateType
+  certificateCode  String          @unique @db.VarChar(64)
+  metadataJson     Json?
+  issuedAt         DateTime        @default(now())
+
+  event            Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  recipient        User            @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+
+  @@index([certificateCode])
+  @@index([recipientUserId, eventId])
+}
+
+model SignedJudgeRecord {
+  id                   String   @id @default(uuid())
+  eventId              String
+  judgeUserId          String
+  evaluationsCount     Int
+  canonicalPayloadText String   @db.Text
+  digitalSignature     String   @db.VarChar(512)
+  keyIdentifier        String   @db.VarChar(64)
+  verificationHash     String   @unique @db.VarChar(64)
+  issuedAt             DateTime @default(now())
+
+  event                Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  judge                User     @relation(fields: [judgeUserId], references: [id], onDelete: Cascade)
+
+  @@index([verificationHash])
+  @@index([judgeUserId, eventId])
+}
