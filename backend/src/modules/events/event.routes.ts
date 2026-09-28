@@ -9,6 +9,7 @@ import { trackRouter } from "../tracks/track.routes";
 import { prizeRouter } from "../prizes/prize.routes";
 import { teamRouter, teamInviteRouter } from "../teams/team.routes";
 import { submissionRouter } from "../submissions/submission.routes";
+import { judgeRouter, rubricRouter, judgingRouter } from "../judging/judging.routes";
 
 export const eventRouter = Router();
 
@@ -138,3 +139,7 @@ eventRouter.use("/:eventId/prizes", prizeRouter);
 eventRouter.use("/:eventId/teams", teamRouter);
 eventRouter.use("/:eventId/team-invites", teamInviteRouter);
 eventRouter.use("/:eventId/submissions", submissionRouter);
+eventRouter.use("/:eventId/judges", judgeRouter);
+eventRouter.use("/:eventId/rubrics", rubricRouter);
+eventRouter.use("/:eventId/judging", judgingRouter);
+
