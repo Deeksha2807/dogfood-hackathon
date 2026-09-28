@@ -3,7 +3,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { config } from "./config/env";
 import { authRouter } from "./modules/auth/auth.routes";
-import { eventAccessRouter } from "./modules/events/event-access.routes";
+import { eventRouter } from "./modules/events/event.routes";
 
 const app = express();
 
@@ -32,7 +32,7 @@ app.get("/api/health", healthHandler);
 
 // Mount feature routers
 app.use("/api/auth", authRouter);
-app.use("/api/events", eventAccessRouter);
+app.use("/api/events", eventRouter);
 
 // 404 handler for unrecognized routes
 app.use((_req: Request, res: Response) => {
