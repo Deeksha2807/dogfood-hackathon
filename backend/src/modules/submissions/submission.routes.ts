@@ -1,11 +1,48 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { submissionService } from "./submission.service";
-import { createSubmissionSchema, updateSubmissionSchema } from "./submission.schema";
-import { requireAuthenticatedUser } from "../../middleware/auth.middleware";
+import {
+  createSubmissionSchema,
+  updateSubmissionSchema,
+  listSubmissionsQuerySchema,
+} from "./submission.schema";
+import {
+  requireAuthenticatedUser,
+  optionalAuthenticatedUser,
+} from "../../middleware/auth.middleware";
 
 export const submissionRouter = Router({ mergeParams: true });
 
+// GET /api/events/:eventId/submissions (Project gallery / submission list)
+submissionRouter.get(
+  "/",
+  optionalAuthenticatedUser,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const eventId = req.params.eventId as string;
+      const parsed = listSubmissionsQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: "VALIDATION_ERROR",
+          message: "Invalid query parameters.",
+          details: parsed.error.flatten().fieldErrors,
+        });
+        return;
+      }
+
+      const result = await submissionService.listSubmissions(
+        eventId,
+        parsed.data,
+        req.user?.id
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // POST /api/events/:eventId/submissions
+
 submissionRouter.post(
   "/",
   requireAuthenticatedUser,

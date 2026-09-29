@@ -25,3 +25,13 @@ export const createInviteSchema = z.object({
 });
 
 export type CreateInviteInput = z.infer<typeof createInviteSchema>;
+
+export const listTeamsQuerySchema = z.object({
+  search: z.string().optional(),
+  trackId: z.string().uuid().optional(),
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+});
+
+export type ListTeamsQuery = z.infer<typeof listTeamsQuerySchema>;
+

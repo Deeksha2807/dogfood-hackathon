@@ -25,3 +25,22 @@ export const updateSubmissionSchema = z.object({
 });
 
 export type UpdateSubmissionInput = z.infer<typeof updateSubmissionSchema>;
+
+export const listSubmissionsQuerySchema = z.object({
+  trackId: z.string().uuid().optional(),
+  search: z.string().optional(),
+  status: z.enum(["DRAFT", "SUBMITTED", "UNDER_REVIEW", "EVALUATED"]).optional(),
+  isDraft: z
+    .string()
+    .transform((val) => val === "true")
+    .optional(),
+  shuffle: z
+    .string()
+    .transform((val) => val === "true")
+    .optional(),
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+});
+
+export type ListSubmissionsQuery = z.infer<typeof listSubmissionsQuerySchema>;
+

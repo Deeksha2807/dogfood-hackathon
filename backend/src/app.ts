@@ -4,6 +4,10 @@ import cookieParser from "cookie-parser";
 import { config } from "./config/env";
 import { authRouter } from "./modules/auth/auth.routes";
 import { eventRouter } from "./modules/events/event.routes";
+import { userRouter } from "./modules/users/user.routes";
+import { votesRouter, commentsRouter } from "./modules/community/community.routes";
+import { auditRouter } from "./modules/audit/audit.routes";
+import { projectsRouter, teamsAliasRouter } from "./modules/submissions/project-alias.routes";
 
 const app = express();
 
@@ -32,7 +36,15 @@ app.get("/api/health", healthHandler);
 
 // Mount feature routers
 app.use("/api/auth", authRouter);
+app.use("/api/users", userRouter);
 app.use("/api/events", eventRouter);
+app.use("/api/projects", projectsRouter);
+app.use("/api/submissions", projectsRouter);
+app.use("/api/teams", teamsAliasRouter);
+app.use("/api/votes", votesRouter);
+app.use("/api/comments", commentsRouter);
+app.use("/api/audit", auditRouter);
+
 
 // 404 handler for unrecognized routes
 app.use((_req: Request, res: Response) => {

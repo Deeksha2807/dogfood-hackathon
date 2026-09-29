@@ -648,8 +648,105 @@ async function main() {
     },
   });
 
+  // 12. Seed Demo Community Votes
+  console.log("Seeding demo community votes...");
+  const votes = [
+    {
+      eventId: event.id,
+      submissionId: submissionAlpha.id,
+      voterUserId: participant3.id,
+      voterFingerprint: "fingerprint_carol_desktop_chrome",
+      ipAddress: "127.0.0.1",
+    },
+    {
+      eventId: event.id,
+      submissionId: submissionAlpha.id,
+      voterUserId: null,
+      voterFingerprint: "fingerprint_public_voter_001",
+      ipAddress: "192.168.1.10",
+    },
+    {
+      eventId: event.id,
+      submissionId: submissionBeta.id,
+      voterUserId: participant1.id,
+      voterFingerprint: "fingerprint_alice_laptop_safari",
+      ipAddress: "127.0.0.1",
+    },
+    {
+      eventId: event.id,
+      submissionId: submissionBeta.id,
+      voterUserId: participant2.id,
+      voterFingerprint: "fingerprint_bob_workstation_firefox",
+      ipAddress: "127.0.0.1",
+    },
+    {
+      eventId: event.id,
+      submissionId: submissionBeta.id,
+      voterUserId: null,
+      voterFingerprint: "fingerprint_public_voter_002",
+      ipAddress: "192.168.1.20",
+    },
+  ];
+
+  for (const v of votes) {
+    await prisma.communityVote.upsert({
+      where: {
+        eventId_voterFingerprint_submissionId: {
+          eventId: v.eventId,
+          voterFingerprint: v.voterFingerprint,
+          submissionId: v.submissionId,
+        },
+      },
+      update: {},
+      create: v,
+    });
+  }
+
+  // 13. Seed Demo Community Comments
+  console.log("Seeding demo community comments...");
+  const comments = [
+    {
+      eventId: event.id,
+      submissionId: submissionAlpha.id,
+      authorUserId: participant3.id,
+      content:
+        "Impressive multi-agent coordination architecture! The fallback handling when individual worker nodes fail is exceptionally well executed.",
+    },
+    {
+      eventId: event.id,
+      submissionId: submissionAlpha.id,
+      authorUserId: organizerUser.id,
+      content:
+        "The live demo was very compelling. Great job team on keeping the latency under 150ms.",
+    },
+    {
+      eventId: event.id,
+      submissionId: submissionBeta.id,
+      authorUserId: participant1.id,
+      content:
+        "Love the eBPF kernel telemetry integration! Real-time distributed tracing with near-zero runtime overhead is fantastic.",
+    },
+  ];
+
+
+  for (const c of comments) {
+    const existing = await prisma.communityComment.findFirst({
+      where: {
+        submissionId: c.submissionId,
+        authorUserId: c.authorUserId,
+        content: c.content,
+      },
+    });
+    if (!existing) {
+      await prisma.communityComment.create({
+        data: c,
+      });
+    }
+  }
+
   console.log("Idempotent fixture seed completed successfully!");
 }
+
 
 main()
   .catch((e) => {

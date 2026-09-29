@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { eventService } from "./event.service";
-import { createEventSchema, updateEventSchema } from "./event.schema";
+import { createEventSchema, updateEventSchema, listEventsQuerySchema } from "./event.schema";
 import { requireAuthenticatedUser } from "../../middleware/auth.middleware";
 import { requireEventOrganizer } from "../../middleware/rbac.middleware";
 import { prisma } from "../../config/database";
@@ -10,8 +10,34 @@ import { prizeRouter } from "../prizes/prize.routes";
 import { teamRouter, teamInviteRouter } from "../teams/team.routes";
 import { submissionRouter } from "../submissions/submission.routes";
 import { judgeRouter, rubricRouter, judgingRouter } from "../judging/judging.routes";
+import { communityRouter } from "../community/community.routes";
+import { auditRouter } from "../audit/audit.routes";
 
 export const eventRouter = Router();
+
+
+// GET /api/events (List Events with pagination and filtering)
+eventRouter.get(
+  "/",
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const parsed = listEventsQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: "VALIDATION_ERROR",
+          message: "Invalid query parameters.",
+          details: parsed.error.flatten().fieldErrors,
+        });
+        return;
+      }
+
+      const result = await eventService.listEvents(parsed.data);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 // POST /api/events (Create Event - established creator as ORGANIZER)
 eventRouter.post(
@@ -29,7 +55,7 @@ eventRouter.post(
         return;
       }
 
-      const event = await eventService.createEvent(req.user!.id, parsed.data);
+      const event = await eventService.createEvent(req.user!.id, parsed.data, req.ip);
       res.status(201).json({ event });
     } catch (error: any) {
       if (error.statusCode) {
@@ -43,6 +69,7 @@ eventRouter.post(
     }
   }
 );
+
 
 // GET /api/events/:eventId (Get Event Details)
 eventRouter.get(
@@ -84,7 +111,7 @@ eventRouter.patch(
         return;
       }
 
-      const event = await eventService.updateEvent(eventId, parsed.data);
+      const event = await eventService.updateEvent(eventId, parsed.data, req.user!.id, req.ip);
       res.status(200).json({ event });
     } catch (error: any) {
       if (error.statusCode) {
@@ -142,4 +169,7 @@ eventRouter.use("/:eventId/submissions", submissionRouter);
 eventRouter.use("/:eventId/judges", judgeRouter);
 eventRouter.use("/:eventId/rubrics", rubricRouter);
 eventRouter.use("/:eventId/judging", judgingRouter);
+eventRouter.use("/:eventId/community", communityRouter);
+eventRouter.use("/:eventId/audit", auditRouter);
+
 

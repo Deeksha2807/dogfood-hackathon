@@ -1,7 +1,9 @@
 import crypto from "crypto";
 import { prisma } from "../../config/database";
-import { CreateTeamInput, UpdateTeamInput, CreateInviteInput } from "./team.schema";
-import { TeamRole, EventRoleType } from "@prisma/client";
+import { CreateTeamInput, UpdateTeamInput, CreateInviteInput, ListTeamsQuery } from "./team.schema";
+import { TeamRole, EventRoleType, Prisma } from "@prisma/client";
+import { auditService } from "../audit/audit.service";
+
 
 export class TeamService {
   /**
@@ -142,6 +144,32 @@ export class TeamService {
 
     return team;
   }
+
+  async getTeamById(teamId: string) {
+    const team = await prisma.team.findUnique({
+      where: { id: teamId },
+      include: {
+        event: { select: { id: true, name: true, status: true } },
+        members: {
+          include: {
+            user: { select: { id: true, name: true, email: true } },
+          },
+        },
+        track: true,
+        submission: true,
+      },
+    });
+
+    if (!team) {
+      const error: any = new Error("Team not found.");
+      error.statusCode = 404;
+      error.code = "TEAM_NOT_FOUND";
+      throw error;
+    }
+
+    return team;
+  }
+
 
   async updateTeam(eventId: string, teamId: string, userId: string, input: UpdateTeamInput) {
     const team = await prisma.team.findFirst({
@@ -421,12 +449,136 @@ export class TeamService {
         update: {},
       });
 
+      await auditService.log({
+        userId: user.id,
+        action: "TEAM_INVITE_ACCEPTED",
+        entityType: "TEAM",
+        entityId: invite.teamId,
+        newValue: { inviteCode },
+      });
+
       return {
         message: "Successfully joined the team.",
         teamId: invite.teamId,
       };
     });
   }
+
+  /**
+   * Lists teams within an event with pagination and filters.
+   */
+  async listTeams(eventId: string, query: Partial<ListTeamsQuery> = {}) {
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.TeamWhereInput = {
+      eventId,
+      ...(query.trackId && { trackId: query.trackId }),
+      ...(query.search && {
+        name: { contains: query.search, mode: "insensitive" },
+      }),
+    };
+
+    const [teams, total] = await Promise.all([
+      prisma.team.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: "asc" },
+        include: {
+          track: true,
+          members: {
+            include: {
+              user: {
+                select: { id: true, name: true, email: true },
+              },
+            },
+          },
+          submission: {
+            select: { id: true, projectName: true, status: true, isDraft: true },
+          },
+        },
+      }),
+      prisma.team.count({ where }),
+    ]);
+
+    return {
+      teams,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Allows a user to leave a team.
+   * If the user is the leader and other members exist, promotes the next member to leader.
+   */
+  async leaveTeam(eventId: string, teamId: string, userId: string, ipAddress?: string | null) {
+    const team = await prisma.team.findFirst({
+      where: { id: teamId, eventId },
+      include: {
+        members: true,
+        submission: true,
+      },
+    });
+
+    if (!team) {
+      const error: any = new Error("Team not found in this event.");
+      error.statusCode = 404;
+      error.code = "TEAM_NOT_FOUND";
+      throw error;
+    }
+
+    const membership = team.members.find((m) => m.userId === userId);
+    if (!membership) {
+      const error: any = new Error("You are not a member of this team.");
+      error.statusCode = 403;
+      error.code = "NOT_A_MEMBER";
+      throw error;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // If leader and other members exist, promote the next member
+      const otherMembers = team.members.filter((m) => m.userId !== userId);
+      if (membership.role === TeamRole.LEADER && otherMembers.length > 0) {
+        await tx.teamMember.update({
+          where: { id: otherMembers[0].id },
+          data: { role: TeamRole.LEADER },
+        });
+      }
+
+      // Remove team membership
+      await tx.teamMember.delete({
+        where: { id: membership.id },
+      });
+
+      // If no members remain and no submission exists, clean up team
+      if (otherMembers.length === 0 && !team.submission) {
+        await tx.teamInvite.deleteMany({ where: { teamId } });
+        await tx.team.delete({ where: { id: teamId } });
+      }
+    });
+
+    await auditService.log({
+      userId,
+      action: "TEAM_MEMBER_LEFT",
+      entityType: "TEAM",
+      entityId: teamId,
+      oldValue: { role: membership.role },
+      ipAddress,
+    });
+
+    return {
+      message: "Successfully left the team.",
+      teamId,
+    };
+  }
 }
+
 
 export const teamService = new TeamService();

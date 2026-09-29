@@ -274,7 +274,7 @@ export class FinalResultService {
       throw error;
     }
 
-    // Check if user is organizer
+    // Check if user is organizer or super admin
     const organizerRole = await prisma.eventRole.findUnique({
       where: {
         eventId_userId_role: {
@@ -285,12 +285,16 @@ export class FinalResultService {
       },
     });
 
-    if (!organizerRole && !event.resultsPublished) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const isSuperAdmin = user?.globalRole === "SUPER_ADMIN";
+
+    if (!organizerRole && !isSuperAdmin && !event.resultsPublished) {
       const error: any = new Error("Final results have not been published yet.");
       error.statusCode = 403;
       error.code = "RESULTS_NOT_PUBLISHED";
       throw error;
     }
+
 
     return prisma.finalResult.findMany({
       where: { eventId },

@@ -48,25 +48,44 @@ The following commands were executed directly against the repository backend:
    $ npm test
    Command: vitest run --fileParallelism=false
    Exit Code: 0
-   Result: SUCCESS. 89 of 89 tests passing across 3 test files.
+   Result: SUCCESS. 117 of 117 tests passing across 4 test files.
 
 4. Database Seed Execution:
    $ npm run prisma:seed
    Command: prisma db seed (tsx prisma/seed.ts)
    Exit Code: 0
-   Result: SUCCESS. Idempotent fixture seeding completed cleanly.
+   Result: SUCCESS. Idempotent fixture seeding completed cleanly (including demo community votes & comments).
 
 --------------------------------------------------------------------------------
 3. TEST SUITE RESULTS BREAKDOWN
 --------------------------------------------------------------------------------
 Test Execution Summary (Vitest v5.0.2):
-  Test Files: 3 passed (3 total)
-  Tests:      89 passed (89 total)
-  Duration:   13.49s
+  Test Files: 4 passed (4 total)
+  Tests:      117 passed (117 total)
+  Duration:   28.36s
 
 Detailed File Breakdown:
 
-1. tests/phase4.test.ts (31 passed tests, ~2115ms)
+1. tests/community-voting.test.ts (28 passed tests)
+   - Event listing with status and search filters
+   - Submission gallery listing with track filter and pagination
+   - Top-level aliases (/api/projects, /api/teams, /api/votes, /api/comments)
+   - Team listing and membership query
+   - User management access restrictions (non-admins rejected from user list)
+   - Admin user listing, profile lookup, and user status modification
+   - Community vote casting by authenticated participant
+   - Duplicate vote prevention by user identity (409 DUPLICATE_VOTE)
+   - Duplicate vote prevention by client fingerprint (409 DUPLICATE_VOTE)
+   - Multi-voter integrity verification and submission vote tallying
+   - Server-side rate limiting on voting (429 RATE_LIMIT_EXCEEDED)
+   - Community comment submission and public retrieval
+   - Organizer comment moderation and private status filtering
+   - Result visibility gating (403 RESULTS_NOT_PUBLISHED prior to publication)
+   - Post-publication result visibility
+   - Security audit trail access restrictions and query verification
+   - Verification of audit records generated from duplicate vote attempts
+
+2. tests/phase4.test.ts (31 passed tests, ~4264ms)
    - Event creation with atomic organizer binding
    - Event retrieval and organizer updates
    - Track creation, listing, updating, and deletion protection (TRACK_IN_USE)
@@ -81,7 +100,7 @@ Detailed File Breakdown:
    - Submission deadline enforcement (rejecting creation/edits past deadline)
    - Submission finalization from DRAFT to SUBMITTED
 
-2. tests/judging.test.ts (49 passed tests, ~1434ms)
+3. tests/judging.test.ts (49 passed tests, ~4122ms)
    - Organizer-scoped judge invitation creation, listing, and revocation
    - Judge invitation acceptance with email validation and JUDGE role assignment
    - Rubric configuration, criteria creation, and basis-point weight validation
@@ -102,7 +121,7 @@ Detailed File Breakdown:
    - Results publication and access gating
    - Sanitized RFC-4180 CSV export of final results
 
-3. tests/auth.test.ts (9 passed tests, ~508ms)
+4. tests/auth.test.ts (9 passed tests, ~1346ms)
    - User registration with unique email validation and Argon2id password hashing
    - Duplicate email registration rejection
    - Login credential verification and secure session token generation
@@ -112,6 +131,7 @@ Detailed File Breakdown:
    - Logout session invalidation and cookie clearing
    - Global session revocation via tokenVersion mismatch
    - Inactive user login rejection
+
 
 --------------------------------------------------------------------------------
 4. DATABASE & PRISMA STATUS
@@ -276,10 +296,10 @@ Runtime Limitation Disclosure:
    As disclosed above, containerized execution could not be verified on this
    system due to the absence of the Docker engine.
 2. Schema-Defined Future / Stretch Entities:
-   The database schema includes models for CommunityVote, CommunityComment,
-   WebhookSubscription, WebhookDelivery, Certificate, and SignedJudgeRecord.
-   These entities have schema definitions and migrations, but their API route
-   controllers and automated tests are not part of the active Phase T1/T2 scope.
+   The database schema includes models for WebhookSubscription, WebhookDelivery,
+   Certificate, and SignedJudgeRecord. These stretch entities have schema definitions
+   and migrations for Phase T4, while Phase T1, T2, and T3 (Community Voting & Comments)
+   are fully implemented and verified with automated test suites.
 3. Client Application:
    The frontend repository exists in /frontend but this report evaluates backend
    service integrity, API routes, database models, and test execution.
@@ -288,8 +308,12 @@ Runtime Limitation Disclosure:
 CONCLUSION
 --------------------------------------------------------------------------------
 The backend codebase compiles with zero TypeScript errors (tsc exit code 0).
-The automated test suite achieves 100% pass rate (89 of 89 tests passing).
-All Phase T1 and Phase T2 judging features are implemented, access-isolated,
+The automated test suite achieves 100% pass rate (117 of 117 tests passing across 4 suites).
+All Phase T1 (Core Auth, RBAC, Events, Teams, Submissions), Phase T2 (Judging Engine,
+Rubrics, Evaluations, Z-Score Normalization, Progress, CSV Export), and Phase T3
+(Community Voting, Duplicate Prevention, Rate Limiting, Comments, Moderation, Result Visibility
+Gating, and Security Audit Logging) features are implemented, access-isolated,
 and verified under host-native execution against PostgreSQL.
 Docker runtime verification is explicitly disclaimed due to missing host tooling.
 ================================================================================
+

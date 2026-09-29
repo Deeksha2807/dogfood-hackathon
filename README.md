@@ -63,7 +63,13 @@ docker compose down -v
 | **Backend Health Check** | `http://localhost:5000/health` | Returns service health status, uptime, and environment |
 | **API Health Check** | `http://localhost:5000/api/health` | Alternate API health route |
 | **Authentication API** | `http://localhost:5000/api/auth` | User registration, login, logout, and session inspection |
-| **Events API** | `http://localhost:5000/api/events` | Events, tracks, teams, submissions, rubrics, and judging |
+| **Users API** | `http://localhost:5000/api/users` | User management, profile lookup, and role/status modification |
+| **Events API** | `http://localhost:5000/api/events` | Events, tracks, prizes, teams, submissions, rubrics, and judging |
+| **Projects / Gallery API**| `http://localhost:5000/api/projects` | Project gallery with track filtering, search, and randomized shuffle |
+| **Community Voting API**| `http://localhost:5000/api/votes` | Community voting with rate-limiting and duplicate prevention |
+| **Community Comments API**| `http://localhost:5000/api/comments` | Community comments with moderation workflows |
+| **Audit Log API** | `http://localhost:5000/api/audit` | Query immutable security audit trail (organizer & admin) |
+| **API Contract Spec** | `file://./API.md` | Comprehensive frontend REST contract and payload documentation |
 | **PostgreSQL Database** | `localhost:5432` | Accessible via psql or GUI clients using credentials from `.env.example` |
 
 ---
@@ -111,6 +117,10 @@ The idempotent seed script (`backend/prisma/seed.ts`) automatically populates:
   - Judge 1 & Judge 2 assigned to Submission 2 (ready for evaluation).
 - **Judge Invitation**:
   - Pending invitation for `invited.judge@hackathon.local`.
+- **Community Votes & Comments**:
+  - 5 realistic community votes with user and fingerprint attribution.
+  - 3 approved community comments demonstrating feedback and moderation.
+
 
 ---
 

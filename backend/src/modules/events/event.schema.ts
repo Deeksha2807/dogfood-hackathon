@@ -62,3 +62,13 @@ export const updateEventSchema = z
   );
 
 export type UpdateEventInput = z.infer<typeof updateEventSchema>;
+
+export const listEventsQuerySchema = z.object({
+  status: z.nativeEnum(EventStatus).optional(),
+  search: z.string().optional(),
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+});
+
+export type ListEventsQuery = z.infer<typeof listEventsQuerySchema>;
+

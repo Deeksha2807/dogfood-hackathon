@@ -68,3 +68,61 @@ export const requireEventOrganizer = requireEventRole([EventRoleType.ORGANIZER])
 export const requireEventJudge = requireEventRole([EventRoleType.JUDGE]);
 export const requireEventParticipant = requireEventRole([EventRoleType.PARTICIPANT]);
 export const requireAnyEventRole = requireEventRole([]);
+
+/**
+ * Middleware: Requires global SUPER_ADMIN role.
+ */
+export function requireGlobalAdmin(req: Request, res: Response, next: NextFunction): void {
+  if (!req.user) {
+    res.status(401).json({
+      error: "UNAUTHORIZED",
+      message: "Authentication required.",
+    });
+    return;
+  }
+  if (req.user.globalRole !== "SUPER_ADMIN") {
+    res.status(403).json({
+      error: "FORBIDDEN",
+      message: "Access denied: Requires administrator privileges.",
+    });
+    return;
+  }
+  next();
+}
+
+/**
+ * Middleware: Requires either global SUPER_ADMIN role or an event ORGANIZER role.
+ */
+export async function requireAdminOrOrganizer(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  if (!req.user) {
+    res.status(401).json({
+      error: "UNAUTHORIZED",
+      message: "Authentication required.",
+    });
+    return;
+  }
+
+  if (req.user.globalRole === "SUPER_ADMIN") {
+    return next();
+  }
+
+  // Check if user is organizer in any event
+  const isOrganizer = await prisma.eventRole.findFirst({
+    where: { userId: req.user.id, role: EventRoleType.ORGANIZER },
+  });
+
+  if (!isOrganizer) {
+    res.status(403).json({
+      error: "FORBIDDEN",
+      message: "Access denied: Requires administrator or organizer role.",
+    });
+    return;
+  }
+
+  next();
+}
+

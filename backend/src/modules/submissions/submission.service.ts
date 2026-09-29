@@ -1,6 +1,8 @@
 import { prisma } from "../../config/database";
-import { CreateSubmissionInput, UpdateSubmissionInput } from "./submission.schema";
-import { SubmissionStatus } from "@prisma/client";
+import { CreateSubmissionInput, UpdateSubmissionInput, ListSubmissionsQuery } from "./submission.schema";
+import { SubmissionStatus, EventRoleType, Prisma } from "@prisma/client";
+import { auditService } from "../audit/audit.service";
+
 
 export class SubmissionService {
   /**
@@ -153,6 +155,41 @@ export class SubmissionService {
     return submission;
   }
 
+  async getSubmissionById(submissionId: string) {
+    const submission = await prisma.submission.findUnique({
+      where: { id: submissionId },
+      include: {
+        track: true,
+        event: { select: { id: true, name: true, status: true, resultsPublished: true } },
+        team: {
+          include: {
+            members: {
+              include: {
+                user: { select: { id: true, name: true, email: true } },
+              },
+            },
+          },
+        },
+        _count: {
+          select: {
+            votes: true,
+            comments: true,
+          },
+        },
+      },
+    });
+
+    if (!submission) {
+      const error: any = new Error("Submission not found.");
+      error.statusCode = 404;
+      error.code = "SUBMISSION_NOT_FOUND";
+      throw error;
+    }
+
+    return submission;
+  }
+
+
   async updateSubmission(
     eventId: string,
     submissionId: string,
@@ -278,7 +315,7 @@ export class SubmissionService {
       throw error;
     }
 
-    return prisma.submission.update({
+    const finalized = await prisma.submission.update({
       where: { id: submissionId },
       data: {
         isDraft: false,
@@ -298,7 +335,121 @@ export class SubmissionService {
         },
       },
     });
+
+    await auditService.log({
+      userId,
+      action: "SUBMISSION_FINALIZED",
+      entityType: "SUBMISSION",
+      entityId: submissionId,
+      newValue: { status: finalized.status, projectName: finalized.projectName },
+    });
+
+    return finalized;
+  }
+
+  /**
+   * Retrieves a paginated gallery/list of submissions for an event.
+   * By default, non-organizers only see submitted/evaluated non-draft projects,
+   * plus any draft belonging to their own team.
+   */
+  async listSubmissions(
+    eventId: string,
+    query: Partial<ListSubmissionsQuery> = {},
+    viewerUserId?: string
+  ) {
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const skip = (page - 1) * limit;
+
+    // Check if viewer is an organizer
+    let isOrganizer = false;
+    if (viewerUserId) {
+      const orgRole = await prisma.eventRole.findFirst({
+        where: { eventId, userId: viewerUserId, role: EventRoleType.ORGANIZER },
+      });
+      const user = await prisma.user.findUnique({ where: { id: viewerUserId } });
+      if (orgRole || user?.globalRole === "SUPER_ADMIN") {
+        isOrganizer = true;
+      }
+    }
+
+    const where: Prisma.SubmissionWhereInput = {
+      eventId,
+      ...(query.trackId && { trackId: query.trackId }),
+      ...(query.status && { status: query.status }),
+      ...(query.search && {
+        OR: [
+          { projectName: { contains: query.search, mode: "insensitive" } },
+          { tagline: { contains: query.search, mode: "insensitive" } },
+          { description: { contains: query.search, mode: "insensitive" } },
+        ],
+      }),
+    };
+
+    // If not organizer, restrict drafts
+    if (!isOrganizer) {
+      if (query.isDraft === true && viewerUserId) {
+        where.isDraft = true;
+        where.team = { members: { some: { userId: viewerUserId } } };
+      } else if (query.isDraft === false) {
+        where.isDraft = false;
+      } else {
+        // Show public submitted projects OR caller's own team drafts
+        where.OR = [
+          { isDraft: false },
+          ...(viewerUserId
+            ? [{ isDraft: true, team: { members: { some: { userId: viewerUserId } } } }]
+            : []),
+        ];
+      }
+    } else if (query.isDraft !== undefined) {
+      where.isDraft = query.isDraft;
+    }
+
+    let submissions = await prisma.submission.findMany({
+      where,
+      skip: query.shuffle ? undefined : skip,
+      take: query.shuffle ? undefined : limit,
+      orderBy: { createdAt: "desc" },
+      include: {
+        track: true,
+        team: {
+          include: {
+            members: {
+              include: {
+                user: { select: { id: true, name: true, email: true } },
+              },
+            },
+          },
+        },
+        _count: {
+          select: {
+            votes: true,
+            comments: true,
+          },
+        },
+      },
+    });
+
+    const total = await prisma.submission.count({ where });
+
+    // Optional shuffle for unbiased voting presentation
+    if (query.shuffle) {
+      submissions = [...submissions].sort(() => Math.random() - 0.5);
+      submissions = submissions.slice(skip, skip + limit);
+    }
+
+    return {
+      submissions,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 }
+
 
 export const submissionService = new SubmissionService();

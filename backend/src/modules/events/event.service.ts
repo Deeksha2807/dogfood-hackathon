@@ -1,14 +1,15 @@
 import { prisma } from "../../config/database";
-import { CreateEventInput, UpdateEventInput } from "./event.schema";
-import { EventRoleType } from "@prisma/client";
+import { CreateEventInput, UpdateEventInput, ListEventsQuery } from "./event.schema";
+import { EventRoleType, Prisma } from "@prisma/client";
+import { auditService } from "../audit/audit.service";
 
 export class EventService {
   /**
    * Creates a new event and establishes the creator's event-scoped ORGANIZER role atomically.
    */
-  async createEvent(userId: string, input: CreateEventInput) {
-    return prisma.$transaction(async (tx) => {
-      const event = await tx.event.create({
+  async createEvent(userId: string, input: CreateEventInput, ipAddress?: string | null) {
+    const event = await prisma.$transaction(async (tx) => {
+      const created = await tx.event.create({
         data: {
           name: input.name,
           description: input.description,
@@ -24,15 +25,77 @@ export class EventService {
       // Grant creator ORGANIZER role in this event
       await tx.eventRole.create({
         data: {
-          eventId: event.id,
+          eventId: created.id,
           userId,
           role: EventRoleType.ORGANIZER,
         },
       });
 
-      return event;
+      return created;
     });
+
+    await auditService.log({
+      userId,
+      action: "EVENT_CREATED",
+      entityType: "EVENT",
+      entityId: event.id,
+      newValue: { name: event.name, status: event.status },
+      ipAddress,
+    });
+
+    return event;
   }
+
+  /**
+   * Retrieves a paginated and filtered list of events.
+   */
+  async listEvents(query: Partial<ListEventsQuery> = {}) {
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.EventWhereInput = {};
+    if (query.status) {
+      where.status = query.status;
+    }
+    if (query.search) {
+      where.OR = [
+        { name: { contains: query.search, mode: "insensitive" } },
+        { description: { contains: query.search, mode: "insensitive" } },
+      ];
+    }
+
+    const [events, total] = await Promise.all([
+      prisma.event.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+        include: {
+          tracks: true,
+          prizes: true,
+          _count: {
+            select: {
+              teams: true,
+              submissions: true,
+            },
+          },
+        },
+      }),
+      prisma.event.count({ where }),
+    ]);
+
+    return {
+      events,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
 
   /**
    * Retrieves an event by its ID.
@@ -65,7 +128,12 @@ export class EventService {
   /**
    * Updates an existing event configuration.
    */
-  async updateEvent(eventId: string, input: UpdateEventInput) {
+  async updateEvent(
+    eventId: string,
+    input: UpdateEventInput,
+    userId?: string,
+    ipAddress?: string | null
+  ) {
     const existing = await prisma.event.findUnique({
       where: { id: eventId },
     });
@@ -127,8 +195,21 @@ export class EventService {
       },
     });
 
+    if (userId) {
+      await auditService.log({
+        userId,
+        action: "EVENT_UPDATED",
+        entityType: "EVENT",
+        entityId: eventId,
+        oldValue: { name: existing.name, status: existing.status, resultsPublished: existing.resultsPublished },
+        newValue: { name: updated.name, status: updated.status, resultsPublished: updated.resultsPublished },
+        ipAddress,
+      });
+    }
+
     return updated;
   }
+
 }
 
 export const eventService = new EventService();

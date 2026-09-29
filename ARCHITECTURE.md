@@ -16,10 +16,16 @@ graph TD
         ExpressApp --> CORS["CORS & Cookie Parser"]
         ExpressApp --> HealthRoutes["/health & /api/health"]
         ExpressApp --> AuthRouter["/api/auth (auth.routes.ts)"]
+        ExpressApp --> UserRouter["/api/users (user.routes.ts)"]
         ExpressApp --> EventRouter["/api/events (event.routes.ts)"]
+        ExpressApp --> ProjectsRouter["/api/projects & /api/submissions"]
+        ExpressApp --> TeamsAliasRouter["/api/teams"]
+        ExpressApp --> VotesRouter["/api/votes"]
+        ExpressApp --> CommentsRouter["/api/comments"]
+        ExpressApp --> AuditRouter["/api/audit (audit.routes.ts)"]
         
-        AuthMiddleware["auth.middleware.ts<br/>(resolveSession / requireAuthenticatedUser)"]
-        RBACMiddleware["rbac.middleware.ts<br/>(requireEventRole / requireEventOrganizer / etc.)"]
+        AuthMiddleware["auth.middleware.ts<br/>(resolveSession / requireAuthenticatedUser / optionalAuthenticatedUser)"]
+        RBACMiddleware["rbac.middleware.ts<br/>(requireGlobalAdmin / requireAdminOrOrganizer / requireEventRole)"]
     end
     
     subgraph Event Sub-Routers
@@ -30,10 +36,13 @@ graph TD
         EventRouter --> JudgesSubRouter["/:eventId/judges"]
         EventRouter --> RubricsSubRouter["/:eventId/rubrics"]
         EventRouter --> JudgingSubRouter["/:eventId/judging"]
+        EventRouter --> CommunitySubRouter["/:eventId/community"]
+        EventRouter --> AuditSubRouter["/:eventId/audit"]
     end
     
     subgraph Service Layer
         AuthRouter --> AuthService["AuthService"]
+        UserRouter --> UserService["UserService"]
         EventRouter --> EventService["EventService"]
         TracksSubRouter --> TrackService["TrackService"]
         PrizesSubRouter --> PrizeService["PrizeService"]
@@ -45,13 +54,23 @@ graph TD
         JudgingSubRouter --> EvaluationService["EvaluationService"]
         JudgingSubRouter --> FinalResultService["FinalResultService"]
         FinalResultService --> NormalizationService["NormalizationService"]
+        VotesRouter --> CommunityService["CommunityService"]
+        CommentsRouter --> CommunityService
+        CommunitySubRouter --> CommunityService
+        AuditRouter --> AuditService["AuditService"]
         
-        JudgeInvitationService --> AuditService["AuditService"]
+        EventService --> AuditService
+        TeamService --> AuditService
+        SubmissionService --> AuditService
+        UserService --> AuditService
+        JudgeInvitationService --> AuditService
         JudgeAssignmentService --> AuditService
         RubricService --> AuditService
         EvaluationService --> AuditService
         FinalResultService --> AuditService
+        CommunityService --> AuditService
     end
+
     
     subgraph Data Access Layer
         ServiceLayer["All Services"] --> PrismaClient["Prisma Client ORM (database.ts)"]
